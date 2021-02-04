@@ -57,9 +57,6 @@ namespace _192226P_IT2163_Assignment2
                         //The response in JSON format
                         string jsonResponse = readStream.ReadToEnd();
 
-                        //To show the JSON response string for learning purpose
-                        lbl_gScore.Text = jsonResponse.ToString();
-
                         JavaScriptSerializer js = new JavaScriptSerializer();
 
                         //Create jsonObject to handle the response e.g. success or Wrror
@@ -152,68 +149,75 @@ namespace _192226P_IT2163_Assignment2
                     {
                         if (accountLogoutCount != 3)
                         {
-                            try
+                            if (checkMaxPasswordTime(userid) == false)
                             {
-                                if (dbSalt != null && dbSalt.Length > 0 && dbHash != null && dbHash.Length > 0)
+                                try
                                 {
-                                    string pwdWithSalt = pwd + dbSalt;
-                                    byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
-                                    string userHash = Convert.ToBase64String(hashWithSalt);
-                                    if (userHash.Equals(dbHash))
+                                    if (dbSalt != null && dbSalt.Length > 0 && dbHash != null && dbHash.Length > 0)
                                     {
-                                        //Practical 4 creates a session
-                                        Session["LoggedInAuth"] = LoginEmail_TB.Text.Trim();
+                                        string pwdWithSalt = pwd + dbSalt;
+                                        byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
+                                        string userHash = Convert.ToBase64String(hashWithSalt);
+                                        if (userHash.Equals(dbHash))
+                                        {
+                                            //Practical 4 creates a session
+                                            Session["LoggedInAuth"] = HttpUtility.HtmlEncode(LoginEmail_TB.Text.Trim());
 
-                                        // create a new GUID and save into the session
-                                        string guid = Guid.NewGuid().ToString();
-                                        Session["RandomAuthToken"] = guid;
+                                            // create a new GUID and save into the session
+                                            string guid = Guid.NewGuid().ToString();
+                                            Session["RandomAuthToken"] = guid;
 
-                                        // now create a new cookie with this guid value
-                                        Response.Cookies.Add(new HttpCookie("RandomAuthToken", guid));
+                                            // now create a new cookie with this guid value
+                                            Response.Cookies.Add(new HttpCookie("RandomAuthToken", guid));
 
-                                        //Revert the Account Attempts to 0 when it the login is accepted.
-                                        RevertAccountAttempts(userid);
+                                            //Revert the Account Attempts to 0 when it the login is accepted.
+                                            RevertAccountAttempts(userid);
 
-                                        Response.Redirect("192226P_MainPage.aspx", false);
+                                            Response.Redirect("192226P_MainPage.aspx", false);
+                                        }
+                                        else
+                                        {
+                                            LoginerrorMsg.Text = "Email or password is not valid. Please try again.";
+                                            LoginerrorMsg.ForeColor = Color.Red;
+                                            accountLogoutCount += 1;
+                                            UpdateAccountAttempts(userid);
+                                            accountAttemptCheck(userid);
+                                            testMsg.Text = accountLogoutCount.ToString();
+                                        }
                                     }
                                     else
                                     {
                                         LoginerrorMsg.Text = "Email or password is not valid. Please try again.";
                                         LoginerrorMsg.ForeColor = Color.Red;
-                                        accountLogoutCount += 1;
-                                        UpdateAccountAttempts(userid);
-                                        accountAttemptCheck(userid);
                                         testMsg.Text = accountLogoutCount.ToString();
                                     }
                                 }
-                                else
+                                catch (Exception ex)
                                 {
-                                    LoginerrorMsg.Text = "Email or password is not valid. Please try again.";
-                                    LoginerrorMsg.ForeColor = Color.Red;
-                                    testMsg.Text = accountLogoutCount.ToString();
+                                    throw new Exception(ex.ToString());
                                 }
+                                finally { }
                             }
-                            catch (Exception ex)
+                            else if (checkMaxPasswordTime(userid) == true)
                             {
-                                throw new Exception(ex.ToString());
+                                Response.Redirect("PasswordChange.aspx", false);
                             }
-                            finally { }
+                            else
+                            {
+                                LoginerrorMsg.Text = "Account Lockout. Please try again in 5 minutes.";
+                                UpdateLockoutTime(userid);
+                                RevertAccountAttempts(userid);
+                                LoginerrorMsg.ForeColor = Color.Red;
+                            }
                         }
                         else
                         {
-                            LoginerrorMsg.Text = "Account Lockout. Please try again in 5 minutes.";
-                            UpdateLockoutTime(userid);
                             RevertAccountAttempts(userid);
+                            LoginerrorMsg.Text = "Account Lockout. Please try again in 5 minutes.";
                             LoginerrorMsg.ForeColor = Color.Red;
                         }
-                    }
-                    else
-                    {
-                        RevertAccountAttempts(userid);
-                        LoginerrorMsg.Text = "Account Lockout. Please try again in 5 minutes.";
-                        LoginerrorMsg.ForeColor = Color.Red;
-                    }
 
+                    }
                 }
             }
         }
@@ -225,6 +229,48 @@ namespace _192226P_IT2163_Assignment2
             {
                 UpdateLockoutTime(userid);
             }
+        }
+
+        //Check if the user need to change their password
+        protected bool checkMaxPasswordTime(string userid)
+        {
+            bool PasswordChange = false;
+            SqlConnection connection = new SqlConnection(MYDBConnectionString);
+            string LockOutTimingQuery = "select MaxPasswordChange FROM Accounts WHERE Email=@USERID";
+            SqlCommand command = new SqlCommand(LockOutTimingQuery, connection);
+            command.Parameters.AddWithValue("@USERID", userid);
+            try
+            {
+                connection.Open();
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+
+                    while (reader.Read())
+                    {
+                        //This is to get the timing that the password has to be changed afterwards
+                        DateTime PasswordChangeEndTime = Convert.ToDateTime(reader["MaxPasswordChange"]);
+                        DateTime NowTime = DateTime.Now;
+                        //Check if the end password time has been passed
+                        int LogoutValid = DateTime.Compare(PasswordChangeEndTime, NowTime);
+                        if (LogoutValid <= 0)
+                        {
+                            PasswordChange = true;
+                        }
+                        else
+                        {
+                            //If the end lockout time has been passed, the lockout time has been passed
+                            PasswordChange = false;
+                        }
+                    }
+
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.ToString());
+            }
+            finally { connection.Close(); }
+            return PasswordChange;
         }
 
         //Update the Attempt numbers in the database
@@ -393,23 +439,17 @@ namespace _192226P_IT2163_Assignment2
                     {
                         //This is to add 5 minutes to the last lockout time.
                         DateTime LockoutEndTiming = Convert.ToDateTime(reader["LockoutTime"]).AddMinutes(5);
-                        //Log 2
-                        System.Diagnostics.Debug.WriteLine(LockoutEndTiming);
                         DateTime NowTime = DateTime.Now;
                         //Check if the end lockout time has been passed
                         int LogoutValid = DateTime.Compare(LockoutEndTiming, NowTime);
                         if (LogoutValid >= 0)
                         {
                             lockedOut = true;
-                            LogoutError.Text = lockedOut.ToString();
-                            LogoutTime.Text = LogoutValid.ToString();
                         }
                         else
                         {
                             //If the end lockout time has been passed, the lockout time has been passed
                             lockedOut = false;
-                            LogoutError.Text = lockedOut.ToString();
-                            LogoutTime.Text = LogoutValid.ToString();
                         }
                     }
 

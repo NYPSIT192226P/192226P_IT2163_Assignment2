@@ -51,5 +51,10 @@ namespace _192226P_IT2163_Assignment2
             Response.Redirect("192226P_LoginForm.aspx", false);
 
         }
+
+        protected void ChangePwd_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("PasswordChange.aspx", false);
+        }
     }
 }

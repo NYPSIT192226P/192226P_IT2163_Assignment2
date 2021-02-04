@@ -17,6 +17,9 @@
         <br />
         <br />
         <asp:Button ID="Logout_Btn" runat="server" OnClick="Logout_Btn_Click" Text="Logout" Visible="False" />
+        <br />
+        <br />
+            <asp:Button ID="ChangePwd" runat="server" OnClick="ChangePwd_Click" Text="Click here to change the password" />
     </form>
 </body>
 </html>

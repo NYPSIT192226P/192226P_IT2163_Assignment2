@@ -10,6 +10,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Data;
 using System.Data.SqlClient;
+using System.Net;
+using System.IO;
+using System.Web.Script.Serialization;
 
 namespace _192226P_IT2163_Assignment2
 {
@@ -18,15 +21,65 @@ namespace _192226P_IT2163_Assignment2
         string MYDBConnectionString = System.Configuration.ConfigurationManager.ConnectionStrings["MYDBConnection"].ConnectionString;
         static string finalHash;
         static string salt;
-        DateTime LockoutTimeStart = DateTime.Now;
+        DateTime LockoutTimeStart = DateTime.Now.AddMinutes(-10);
         DateTime MinPasswordTime = DateTime.Now.AddMinutes(5);
         DateTime MaxPasswordTime = DateTime.Now.AddMinutes(15);
         int AttemptStartNo = 0;
         byte[] Key;
         byte[] IV;
+        public class MyObject
+        {
+            public string success { get; set; }
+            public string ErrorMessage { get; set; }
+        }
+
         protected void Page_Load(object sender, EventArgs e)
         {
             
+        }
+
+        //Captcha V3 codes
+        public bool ValidateCaptcha()
+        {
+            bool results = true;
+
+            //When user submits the recaptcha form, the user gets a response POST parameter,
+            //captchaResponse consist of the user click pattern. Behaviour analytics! AI :)
+            string captchaResponse = Request.Form["g-recaptcha-response"];
+
+            //To send a GET request to Google along with the response and Secret key.
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create
+            ("https://www.google.com//recaptcha/api/siteverify?secret=6LepajUaAAAAAImIfKn10w5Zl_kAvQ6pjzJC9YIt &response=" + captchaResponse);
+
+            try
+            {
+
+                //Codes to receive the Response in JSON format from Google Server
+                using (WebResponse wResponse = req.GetResponse())
+                {
+                    using (StreamReader readStream = new StreamReader(wResponse.GetResponseStream()))
+                    {
+                        //The response in JSON format
+                        string jsonResponse = readStream.ReadToEnd();
+
+                        JavaScriptSerializer js = new JavaScriptSerializer();
+
+                        //Create jsonObject to handle the response e.g. success or Wrror
+                        //Deserialize Json
+                        MyObject jsonObject = js.Deserialize<MyObject>(jsonResponse);
+
+                        //Convert the string "False" to bool false or "True" to vool true
+                        results = Convert.ToBoolean(jsonObject.success);//
+
+
+                    }
+                }
+                return results;
+            }
+            catch (WebException ex)
+            {
+                throw ex;
+            }
         }
 
         private Boolean validateInputs()
@@ -200,44 +253,46 @@ namespace _192226P_IT2163_Assignment2
 
         protected void submit_btm_Click(object sender, EventArgs e)
         {
-            bool validated = validateInputs();
-
-            if (validated == true)
+            if (ValidateCaptcha())
             {
-                //string pwd = get value from your Textbox
-                string pwd = Password_TB.Text.ToString().Trim(); ;
+                bool validated = validateInputs();
 
-                //Generate random "salt"
-                RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
-                byte[] saltByte = new byte[8];
+                if (validated == true)
+                {
+                    //string pwd = get value from your Textbox
+                    string pwd = HttpUtility.HtmlEncode(Password_TB.Text.ToString().Trim()); ;
 
-                //Fills array of bytes with a cryptographically strong sequence of random values.
-                rng.GetBytes(saltByte);
-                salt = Convert.ToBase64String(saltByte);
+                    //Generate random "salt"
+                    RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
+                    byte[] saltByte = new byte[8];
 
-                SHA512Managed hashing = new SHA512Managed();
+                    //Fills array of bytes with a cryptographically strong sequence of random values.
+                    rng.GetBytes(saltByte);
+                    salt = Convert.ToBase64String(saltByte);
 
-                string pwdWithSalt = pwd + salt;
-                byte[] plainHash = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwd));
-                byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
+                    SHA512Managed hashing = new SHA512Managed();
 
-                finalHash = Convert.ToBase64String(hashWithSalt);
+                    string pwdWithSalt = pwd + salt;
+                    byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
 
-                RijndaelManaged cipher = new RijndaelManaged();
-                cipher.GenerateKey();
-                Key = cipher.Key;
-                IV = cipher.IV;
+                    finalHash = Convert.ToBase64String(hashWithSalt);
 
-                createAccount();
-                //Go to the login from if successful
-                Response.Redirect("192226P_LoginForm.aspx", false);
+                    RijndaelManaged cipher = new RijndaelManaged();
+                    cipher.GenerateKey();
+                    Key = cipher.Key;
+                    IV = cipher.IV;
+
+                    createAccount();
+                    //Go to the login from if successful
+                    Response.Redirect("192226P_LoginForm.aspx", false);
+                }
+                else
+                {
+                    error_msg.Text = "Account cannot be created. Please try again.";
+                    error_msg.ForeColor = Color.Red;
+                }
+
             }
-            else
-            {
-                error_msg.Text = "Account cannot be created. Please try again.";
-                error_msg.ForeColor = Color.Red;
-            }
-
         }
 
         public void createAccount()
@@ -246,7 +301,7 @@ namespace _192226P_IT2163_Assignment2
             {
                 using (SqlConnection con = new SqlConnection(MYDBConnectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Accounts VALUES(@FName, @LName, @CreditCard, @Email, @Mobile, @PasswordHash, @PasswordSalt, @DOB, @MobileVerified, @EmailVerified, @IV, @Key,@Attempt,@LockoutTime,@1stOldPassword,@2ndOldPassword,@MinPasswordChange,@MaxPasswordChange)"))
+                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Accounts VALUES(@FName, @LName, @CreditCard, @Email, @Mobile, @PasswordHash, @PasswordSalt, @DOB, @MobileVerified, @EmailVerified, @IV, @Key,@Attempt,@LockoutTime,@FirstOldPasswordHash,@FirstOldPasswordSalt,@SecondOldPasswordHash,@SecondOldPasswordSalt,@MinPasswordChange,@MaxPasswordChange)"))
                     {
                         using (SqlDataAdapter sda = new SqlDataAdapter())
                         {
@@ -265,8 +320,10 @@ namespace _192226P_IT2163_Assignment2
                             cmd.Parameters.AddWithValue("@Key", Convert.ToBase64String(Key));
                             cmd.Parameters.AddWithValue("@Attempt", AttemptStartNo);
                             cmd.Parameters.AddWithValue("@LockoutTime", LockoutTimeStart);
-                            cmd.Parameters.AddWithValue("@1stOldPassword", DBNull.Value);
-                            cmd.Parameters.AddWithValue("@2ndOldPassword", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@FirstOldPasswordHash", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@FirstOldPasswordSalt", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@SecondOldPasswordHash", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@SecondOldPasswordSalt", DBNull.Value);
                             cmd.Parameters.AddWithValue("@MinPasswordChange", MinPasswordTime);
                             cmd.Parameters.AddWithValue("@MaxPasswordChange", MaxPasswordTime);
                             cmd.Connection = con;

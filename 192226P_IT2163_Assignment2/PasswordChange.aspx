@@ -35,6 +35,12 @@
         <p>
         <asp:Label ID="PasswordError" runat="server"></asp:Label>
         </p>
+        <p>
+        <asp:Label ID="Password1" runat="server"></asp:Label>
+        </p>
+        <p>
+        <asp:Label ID="Password2" runat="server"></asp:Label>
+        </p>
     </form>
 </body>
 </html>

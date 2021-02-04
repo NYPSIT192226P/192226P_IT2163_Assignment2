@@ -42,6 +42,10 @@ namespace _192226P_IT2163_Assignment2
                 ErrorMessage.Text = "Password has expired. You need to change it.";
                 ErrorMessage.ForeColor = Color.Red;
             }
+            else
+            {
+                ErrorMessage.Text = "";
+            }
         }
 
         //Check if the user need to change their password

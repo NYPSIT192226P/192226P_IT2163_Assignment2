@@ -5,7 +5,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head runat="server">
     <title>Registration Form</title>
-    <script src="https://www.google.com/recaptcha/api.js?render=6LepajUaAAAAAJ-czEDt3q9X84zWCsEve8E0opvl"></script>
+    <script src="https://www.google.com/recaptcha/api.js?render="></script>
     <script type="text/javascript">
         function checkScore() {
             var pass = document.getElementById('<%=Password_TB.ClientID %>').value;
@@ -125,7 +125,7 @@
     </form>
     <script>
         grecaptcha.ready(function () {
-            grecaptcha.execute('6LepajUaAAAAAJ-czEDt3q9X84zWCsEve8E0opvl', { action: 'Login' }).then(function (token) {
+            grecaptcha.execute('', { action: 'Login' }).then(function (token) {
                 document.getElementById("g-recaptcha-response").value = token;
             });
         });
